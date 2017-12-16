@@ -37,7 +37,6 @@ func TestBoardTerminalAcross(t *testing.T) {
 }
 
 func TestBoardMatchesMask(t *testing.T) {
-	t.SkipNow()
 	b := newBoard(8, 8)
 	val1, val2 := byte('o'), byte('x')
 	drop(b, val1, 0)
