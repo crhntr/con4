@@ -1,218 +1,208 @@
 package main
 
 import (
-	"errors"
 	"fmt"
+	"math/bits"
+)
+
+const (
+	Width    = 7 // width of the board
+	Height   = 6 // height of the board
+	MinScore = -(Width*Height)/2 + 3
+	MaxScore = (Width*Height+1)/2 - 3
 )
 
 var (
-	errCollumnFull = errors.New("collumn full")
+	bottomMask = bottom(Width, Height)
+	boardMask  = bottomMask * ((1 << Height) - 1)
 )
 
-func newBoard(cols, rows int) [][]byte {
-	board := make([][]byte, cols)
-	for col := range board {
-		board[col] = make([]byte, rows)
+func init() {
+	if Width >= 10 {
+		panic("width must be less than 10")
 	}
-	return board
+	if Width*(Height+1) > 64 {
+		panic("board does not fit into a 64 bit bitboard")
+	}
 }
 
-func drop(board [][]byte, val byte, col int) ([][]byte, error) {
-	if col < 0 || col >= len(board) {
-		return board, nil
-	}
-
-	if len(board[col]) > 0 && board[col][0] != 0 {
-		return board, errCollumnFull
-	}
-
-	for row := 0; row < len(board[col]); row++ {
-		if board[col][row] != 0 {
-			board[col][row-1] = val
-			return board, nil
-		}
-	}
-
-	board[col][len(board[col])-1] = val
-	return board, nil
+func ColumnMask(col uint64) uint64 {
+	return ((1 << Height) - 1) << col * (Height + 1)
 }
 
-func utility(board [][]byte, val byte, col int) float64 {
-	b := clone(board)
-	current := score(board, val)
-	drop(b, val, col)
-	return score(b, val) - current
+func bottom(width uint64, height uint64) uint64 {
+	if width == 0 {
+		return 0
+	}
+	return bottom(width-1, height) | 1<<((width-1)*(height+1))
 }
 
-func display(board [][]byte) {
-	for row := 0; row < len(board[len(board)-1]); row++ {
-		fmt.Printf("|")
-		for col := 0; col < len(board); col++ {
-			if board[col][row] != 0 {
-				fmt.Printf(" %c |", board[col][row])
+func topMaskColumn(col uint64) uint64 {
+	return uint64(1) << ((Height - 1) + col*(Height+1))
+}
+
+// return a bitmask containg a single 1 corresponding to the bottom cell of a given column
+func bottomMaskColumn(col uint64) uint64 {
+	return uint64(1) << col * (Height + 1)
+}
+
+func getBit(n uint64, pos int) uint64 {
+	val := n & (1 << uint(pos))
+	if val > 0 {
+		return 1
+	}
+	return 0
+}
+
+type Board struct {
+	currentBoard uint64 // bitmap of the currentPlayer's tokens
+	mask         uint64 // bitmap of all the already played spots
+	Moves        int    // number of moves played
+}
+
+func (board Board) Clone() Board {
+	return Board{
+		currentBoard: board.currentBoard,
+		mask:         board.mask,
+		Moves:        board.Moves,
+	}
+}
+
+func (board Board) String() string {
+	opChar, cpChar := "x ", "o "
+	if ((board.Moves % 2) + 1) == 1 {
+		opChar, cpChar = cpChar, opChar
+	}
+
+	buf := ""
+
+	for r := 0; r < Height; r++ {
+		rBuf := ""
+
+		for c := 0; c < Width*(Height+1); c += Height + 1 {
+			current := getBit(board.currentBoard, c+r)
+			mask := getBit(board.mask, c+r)
+
+			if current == 1 && mask == 1 {
+				rBuf += opChar
+			} else if current == 0 && mask == 1 {
+				rBuf += cpChar
 			} else {
-				fmt.Print("   |")
-			}
-		}
-		fmt.Println()
-	}
-
-	// for range board {
-	// 	fmt.Print("----")
-	// }
-
-	// fmt.Println()
-	// fmt.Print("|")
-	for i := range board {
-		fmt.Printf(" %2d ", i)
-	}
-	fmt.Println()
-}
-
-func clone(board [][]byte) [][]byte {
-	cloned := newBoard(len(board), len(board[0]))
-
-	for col := range board {
-		for row := range board[col] {
-			cloned[row][col] = board[row][col]
-		}
-	}
-
-	return cloned
-}
-
-func score(board [][]byte, val byte) float64 {
-
-	if _, done := terminal(board, val); done {
-		return winningScore
-	}
-
-	return findPatternWithMask(board, val, maskVertical, 0.25) +
-		findPatternWithMask(board, val, maskHorzontal, 0.25) +
-		findPatternWithMask(board, val, maskForwardDiagnal, 0.25) +
-		findPatternWithMask(board, val, maskBackwardsDiagnal, 0.25)
-}
-
-func findPatternWithMask(board [][]byte, val byte, mask [][]bool, score float64) float64 {
-	acumulatedScore := 0.0
-
-	incrementCol := 1
-	incrementRow := 1
-	if len(mask) == len(mask[0]) {
-		incrementCol = len(mask)
-		incrementRow = len(mask[0])
-	}
-
-	for boardCol := len(board) - 1; boardCol >= 0; boardCol -= incrementCol {
-		for boardRow := len(board) - 1; boardRow >= 0; boardRow -= incrementRow {
-
-			for maskCol := len(mask) - 1; maskCol >= 0 && boardCol+maskCol >= 0 && boardCol+maskCol < len(board); maskCol-- {
-				for maskRow := len(mask[maskCol]) - 1; maskRow >= 0 && boardRow+maskRow >= 0 && boardRow+maskRow < len(board[boardCol+maskCol]); maskRow-- {
-
-					if mask[maskCol][maskRow] && board[boardCol+maskCol][boardRow+maskRow] == val {
-						acumulatedScore += score
-					}
-				}
-			}
-		}
-	}
-
-	return acumulatedScore
-}
-
-func terminal(board [][]byte, vals ...byte) (byte, bool) {
-	for _, val := range vals {
-
-		for _, mask := range [][][]bool{
-			maskVertical,
-			maskHorzontal,
-			maskForwardDiagnal,
-			maskBackwardsDiagnal} {
-
-			incrementCol := 1
-			incrementRow := 1
-			if len(mask) == len(mask[0]) {
-				incrementCol = len(mask)
-				incrementRow = len(mask[0])
-			}
-
-			for boardCol := len(board) - 1; boardCol >= 0; boardCol -= incrementCol {
-				boardRow := len(board) - 1
-			nextFrame:
-
-				for ; boardRow >= 0; boardRow -= incrementRow {
-					firstMatchFound := false
-
-					for maskCol := len(mask) - 1; maskCol >= 0 && boardCol+maskCol >= 0 && boardCol+maskCol < len(board); maskCol-- {
-						for maskRow := len(mask[maskCol]) - 1; maskRow >= 0 && boardRow+maskRow >= 0 && boardRow+maskRow < len(board[boardCol+maskCol]); maskRow-- {
-
-							if mask[maskCol][maskRow] {
-
-								if board[boardCol+maskCol][boardRow+maskRow] == val {
-									if firstMatchFound && maskCol == 0 && maskRow == 0 {
-										return val, true
-									}
-									firstMatchFound = true
-
-								} else {
-									continue nextFrame
-								}
-
-							}
-						}
-					}
-				}
+				rBuf += ". "
 			}
 		}
 
+		buf = buf + "\n" + rBuf
 	}
-	return byte(0), false
+
+	return buf
 }
 
-var maskVertical = [][]bool{
-	{true, true, true, true},
+func (board *Board) Play(move uint64) {
+	board.currentBoard ^= board.mask
+	board.mask |= move
+	board.Moves++
 }
 
-var maskHorzontal = [][]bool{
-	{true},
-	{true},
-	{true},
-	{true},
+func (board Board) PossibleNonLosingMoves() uint64 {
+	possibleMask := board.possible()
+	opponentWin := board.opponentWinningBoard()
+	forcedMoves := possibleMask & opponentWin
+
+	if forcedMoves != 0 {
+		if forcedMoves&(forcedMoves-1) != 0 {
+			return 0
+		}
+		opponentWin = forcedMoves
+	}
+	return possibleMask & ^(opponentWin >> 1)
 }
 
-var maskForwardDiagnal = [][]bool{
-	{true, false, false, false},
-	{false, true, false, false},
-	{false, false, true, false},
-	{false, false, false, true},
+func (board Board) CanWinNext() bool {
+	return board.winningBoard()&board.possible() != 0
 }
 
-var maskBackwardsDiagnal = [][]bool{
-	{false, false, false, true},
-	{false, false, true, false},
-	{false, true, false, false},
-	{true, false, false, false},
+func (board Board) MoveScore(move uint64) int {
+	return bits.OnesCount64((ComputeWinningBoard(board.currentBoard|move, board.mask)))
 }
 
-// func check(board [][]byte, val byte, c, r, sizeCol, sizeRow, incrementCol, incrementRow int) int {
-// 	count := 0
-// 	fmt.Println(c, r)
-//
-// 	if c+sizeCol >= len(board) || r+sizeRow > len(board[0]) {
-// 		return count
-// 	}
-//
-// 	for col := c; col < sizeCol+c; col += incrementCol {
-// 		for row := r; row < sizeRow+r; row += incrementRow {
-// 			if board[col][row] == val {
-// 				count++
-// 			} else if board[col][row] == byte(0) {
-// 				// empty spot
-// 			} else {
-// 				return 0
-// 			}
-// 		}
-// 	}
-// 	return count
-// }
-//
+func (board *Board) PlayColumn(column int) {
+	board.Play((board.mask + bottomMaskColumn(uint64(column))) & ColumnMask(uint64(column)))
+}
+
+func (board *Board) PlayAll(moveColumns ...int) int {
+	for i, col := range moveColumns {
+		if !board.canPlay(uint64(col)) {
+			panic(fmt.Errorf("board cannot play %d", col))
+		}
+
+		if col < 0 || col > Width || board.IsWinningMove(col) {
+			return i
+		}
+		board.PlayColumn(col)
+	}
+	return len(moveColumns)
+}
+
+func (board *Board) PlayString(plays string) int {
+	moves := []int{}
+	for i, _ := range plays {
+		moves = append(moves, int(plays[i])-int('0'))
+	}
+	return board.PlayAll(moves...)
+}
+
+func (board *Board) Key() uint64 {
+	return board.currentBoard | board.mask
+}
+
+func (board Board) IsWinningMove(col int) bool {
+	return (board.winningBoard() & board.possible() & ColumnMask(uint64(col))) != 0
+}
+
+func (board Board) canPlay(col uint64) bool {
+	return (board.mask & topMaskColumn(col)) == 0
+}
+
+func (board Board) winningBoard() uint64 {
+	return ComputeWinningBoard(board.currentBoard, board.mask)
+}
+
+func (board Board) opponentWinningBoard() uint64 {
+	return ComputeWinningBoard(board.currentBoard^board.mask, board.mask)
+}
+
+func (board Board) possible() uint64 {
+	return (board.mask | bottomMask) & boardMask
+}
+
+func ComputeWinningBoard(board uint64, mask uint64) uint64 {
+	// vertical
+	r := (board << 1) & (board << 2) & (board << 3)
+
+	// horizontal
+	p := (board << (Height + 1)) & (board << 2 * (Height + 1))
+	r |= p & (board << 3 * (Height + 1))
+	r |= p & (board >> (Height + 1))
+	p = (board >> (Height + 1)) & (board >> 2 * (Height + 1))
+	r |= p & (board << (Height + 1))
+	r |= p & (board >> 3 * (Height + 1))
+
+	// diagonal 1
+	p = (board << Height) & (board << 2 * Height)
+	r |= p & (board << 3 * Height)
+	r |= p & (board >> Height)
+	p = (board >> Height) & (board >> 2 * Height)
+	r |= p & (board << Height)
+	r |= p & (board >> 3 * Height)
+
+	// diagonal 2
+	p = (board << (Height + 2)) & (board << 2 * (Height + 2))
+	r |= p & (board << 3 * (Height + 2))
+	r |= p & (board >> (Height + 2))
+	p = (board >> (Height + 2)) & (board >> 2 * (Height + 2))
+	r |= p & (board << (Height + 2))
+	r |= p & (board >> 3 * (Height + 2))
+
+	return r & (boardMask ^ mask)
+}
