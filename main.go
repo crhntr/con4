@@ -1,148 +1,163 @@
 package main
 
-import "fmt"
-
-var (
-	nodeCount   = 0
-	columnOrder [Width]uint64
+import (
+	"fmt"
+	"math"
 )
 
-func init() {
-	for i := 0; i < Width; i++ {
-		columnOrder[i] = uint64(Width/2 + (1-2*(i%2))*(i+1)/2)
-	}
-}
+const (
+	maxDepth     = 12
+	winningScore = 1000
+)
 
 func main() {
-	board := Board{}
+	blueChip, redChip := byte('O'), byte('X')
 
-	board.PlayColumn(0)
-	board.PlayColumn(1)
-	board.PlayColumn(0)
-	board.PlayColumn(1)
-	board.PlayColumn(0)
-	board.PlayColumn(1)
-	board.PlayColumn(0)
-	board.PlayColumn(1)
+	board := newBoard(8, 8)
+	machineTurn := false
+	for {
+		fmt.Print("\n\n\n\n\n\n\n\n\n\n\n\n\n\n")
 
-	fmt.Println(board)
-
-	fmt.Printf("%064b\n%064b\nc", board.currentBoard, board.mask)
-}
-
-func solve(board Board, weak bool) int {
-	if board.CanWinNext() {
-		return (Width*Height + 1 - board.Moves) / 2
-	} // check if win in one move as the Negamax function does not support this case.
-
-	min := -(Width*Height - board.Moves) / 2
-	max := (Width*Height + 1 - board.Moves) / 2
-	if weak {
-		min = -1
-		max = 1
-	}
-
-	for min < max { // iteratively narrow the min-max exploration window
-		med := min + (max-min)/2
-		if med <= 0 && min/2 < med {
-			med = min / 2
-		} else if med >= 0 && max/2 > med {
-			med = max / 2
+		if winner, done := terminal(board, blueChip, redChip); done {
+			fmt.Printf("%c has won!\n", winner)
+			break
 		}
 
-		r := negamax(board, med, med+1) // use a null depth window to know if the actual score is greater or smaller than med
-		if r <= med {
-			max = r
+		var err error
+		if machineTurn {
+			fmt.Print("machine thinking...")
+			_, machineSelection := NegaMax(board, redChip, blueChip)
+			err = drop(board, redChip, machineSelection)
+			fmt.Printf("and chose %d\n", machineSelection)
 		} else {
-			min = r
+			fmt.Println()
+			display(board)
+
+			fmt.Println("select a column number: ")
+			var userSelection int
+			fmt.Scanf("%d", &userSelection)
+
+			err = drop(board, blueChip, userSelection)
 		}
+		if err != nil {
+			fmt.Println("column selected did not work")
+		}
+		machineTurn = !machineTurn
 	}
-	return min
 }
 
-func negamax(board Board, alpha, beta int) int {
-	// assert(alpha < beta);
-	// assert(!board.canWinNext());
+var depth = 0
 
-	nodeCount++ // increment counter of explored nodes
-
-	possible := board.PossibleNonLosingMoves()
-	if possible == 0 {
-		return -(Width*Height - board.Moves) / 2 // opponent wins next move
+func NegaMax(board [][]byte, val1, val2 byte) (score, column int) {
+	if full(board) {
+		return 0, 0
 	}
 
-	if board.Moves > Width*Height-2 {
-		return 0 // tie
+	for col := 0; col < len(board); col++ {
+		b := clone(board)
+		err := drop(b, val1, col)
+		if _, term := terminal(b, val1); err == nil && term {
+			score, column = 1, col
+			return score, column
+		}
 	}
 
-	min := -(Width*Height - 2 - board.Moves) / 2 // lower bound of score as opponent cannot win next move
-	if alpha < min {
-		alpha = min // there is no need to keep beta above our max possible score.
-		if alpha >= beta {
-			return alpha
-		} // prune the exploration if the [alpha;beta] window is empty.
-	}
+	score, column = math.MinInt64, len(board)/2
 
-	max := (Width*Height - 1 - board.Moves) / 2 // upper bound of our score as we cannot win immediately
-	if beta > max {
-		beta = max // there is no need to keep beta above our max possible score.
-		if alpha >= beta {
-			return beta
-		} // prune the exploration if the [alpha;beta] window is empty.
-	}
-
-	stateMap := map[uint64]int{}
-
-	key := board.Key()
-
-	if val, found := stateMap[key]; found {
-		if val > MaxScore-MinScore+1 { // we have an lower bound
-
-			min = val + 2*MinScore - MaxScore - 2
-
-			if alpha < min {
-				alpha = min // there is no need to keep beta above our max possible score.
-				if alpha >= beta {
-					return alpha
-				} // prune the exploration if the [alpha;beta] window is empty.
+	for col := 0; col < len(board); col++ {
+		b := clone(board)
+		if err := drop(b, val1, col); err == nil {
+			s, _ := NegaMax(b, val2, val1)
+			s = -s
+			if s > score {
+				score, column = s, col
 			}
-		} else { // we have an upper bound
+		}
+	}
+	return score, column
+}
 
-			max = val + MinScore - 1
+func MinimaxDecision(board [][]byte, minVal, maxVal byte, depth int) int {
+	b := clone(board)
 
-			if beta > max {
-				beta = max // there is no need to keep beta above our max possible score.
-				if alpha >= beta {
-					return beta
-				} // prune the exploration if the [alpha;beta] window is empty.
+	alpha, beta := math.Inf(-1), math.Inf(1)
+
+	bestCol, maxUtility := 0, -math.Inf(-1)
+
+	// scores := make([]float64, len(b))
+	for c := 0; c < len(b); c++ {
+		drop(board, maxVal, c)
+		v := minValue(board, alpha, beta, minVal, maxVal, maxDepth)
+		// scores = append(scores, v)
+
+		if v > maxUtility {
+			bestCol, maxUtility = c, v
+
+			if alpha > v {
+				alpha = v
 			}
 		}
 	}
 
-	moves := Moves{}
+	return bestCol
+}
 
-	for i := Width; i >= 0; i-- {
-		if move := possible & ColumnMask(columnOrder[i]); move > 0 {
-			moves.Add(move, board.MoveScore(move))
+func maxValue(board [][]byte, alpha, beta float64, minVal, maxVal byte, depth int) float64 {
+
+	depth--
+	if _, done := terminal(board, minVal, maxVal); done || depth <= 0 {
+		return score(board, maxVal) - score(board, minVal)
+	}
+
+	v := math.Inf(1)
+
+	for c := 0; c < len(board); c++ {
+		b := clone(board)
+		drop(board, maxVal, c)
+
+		utilVal := minValue(b, alpha, beta, minVal, maxVal, depth)
+		if utilVal > v {
+			v = utilVal
+		}
+
+		if v <= beta {
+			return v
+		}
+
+		if v > alpha {
+			alpha = v
 		}
 	}
 
-	for _, move := range moves {
-		nextBoard := board.Clone()
+	return v
+}
 
-		nextBoard.Play(move.Move)
+func minValue(board [][]byte, alpha, beta float64, minVal, maxVal byte, depth int) float64 {
 
-		score := -negamax(nextBoard, -beta, -alpha)
+	depth--
+	if _, done := terminal(board, minVal, maxVal); done || depth <= 0 {
+		return score(board, maxVal) - score(board, minVal)
+	}
 
-		if score >= beta {
-			moves.Add(board.Key(), score+MaxScore-2*MinScore+2)
-			return score
+	v := math.Inf(-1)
+
+	for c := 0; c < len(board); c++ {
+		b := clone(board)
+		drop(board, minVal, c)
+
+		utilVal := minValue(b, alpha, beta, minVal, maxVal, depth)
+		if utilVal < v {
+			v = utilVal
 		}
-		if score > alpha {
-			alpha = score
+
+		if v >= alpha {
+			return v
+		}
+
+		if v < beta {
+			beta = v
 		}
 	}
 
-	stateMap[key] = alpha - MinScore + 1 // save the upper bound of the position
-	return alpha
+	return v
 }
