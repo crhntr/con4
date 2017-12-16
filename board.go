@@ -9,15 +9,17 @@ var (
 	errCollumnFull = errors.New("collumn full")
 )
 
-func newBoard(cols, rows int) [][]byte {
-	board := make([][]byte, cols)
+type ByteBoard [][]byte
+
+func NewByteBoard(cols, rows int) ByteBoard {
+	board := make(ByteBoard, cols)
 	for col := range board {
 		board[col] = make([]byte, rows)
 	}
 	return board
 }
 
-func drop(board [][]byte, val byte, col int) error {
+func (board ByteBoard) Drop(val byte, col int) error {
 	if col < 0 || col >= len(board) {
 		return nil
 	}
@@ -37,40 +39,35 @@ func drop(board [][]byte, val byte, col int) error {
 	return nil
 }
 
-func utility(board [][]byte, val byte, col int) float64 {
-	b := clone(board)
-	current := score(board, val)
-	drop(b, val, col)
-	return score(b, val) - current
+func (board ByteBoard) Utility(val byte, col int) float64 {
+	b := board.Clone()
+	currentScore := board.Score(val)
+	b.Drop(val, col)
+	return b.Score(val) - currentScore
 }
 
-func display(board [][]byte) {
+func (board ByteBoard) String() string {
+	str := ""
 	for row := 0; row < len(board[len(board)-1]); row++ {
-		fmt.Printf("|")
+		str += fmt.Sprintf("|")
 		for col := 0; col < len(board); col++ {
 			if board[col][row] != 0 {
-				fmt.Printf(" %c |", board[col][row])
+				str += fmt.Sprintf(" %c |", board[col][row])
 			} else {
-				fmt.Print("   |")
+				str += fmt.Sprint("   |")
 			}
 		}
-		fmt.Println()
+		str += fmt.Sprintln()
 	}
 
-	// for range board {
-	// 	fmt.Print("----")
-	// }
-
-	// fmt.Println()
-	// fmt.Print("|")
 	for i := range board {
-		fmt.Printf(" %2d ", i)
+		str += fmt.Sprintf(" %2d ", i)
 	}
-	fmt.Println()
+	return str + "\n"
 }
 
-func clone(board [][]byte) [][]byte {
-	cloned := newBoard(len(board), len(board[0]))
+func (board ByteBoard) Clone() ByteBoard {
+	cloned := NewByteBoard(len(board), len(board[0]))
 
 	for col := range board {
 		for row := range board[col] {
@@ -81,34 +78,34 @@ func clone(board [][]byte) [][]byte {
 	return cloned
 }
 
-func score(board [][]byte, val byte) float64 {
-	if _, done := terminal(board, val); done {
+func (board ByteBoard) Score(val byte) float64 {
+	if _, done := board.IsTerminal(val); done {
 		return winningScore
 	}
 
-	if findPatternWithMask(board, val, mask4Vertical) ||
-		findPatternWithMask(board, val, mask4Horzontal) ||
-		findPatternWithMask(board, val, mask4ForwardDiagnal) ||
-		findPatternWithMask(board, val, mask4BackwardsDiagnal) {
+	if board.findPatternWithMask(val, mask4Vertical) ||
+		board.findPatternWithMask(val, mask4Horzontal) ||
+		board.findPatternWithMask(val, mask4ForwardDiagnal) ||
+		board.findPatternWithMask(val, mask4BackwardsDiagnal) {
 		return 1
 	}
 	return 0
 
 }
 
-func terminal(board [][]byte, vals ...byte) (byte, bool) {
+func (board ByteBoard) IsTerminal(vals ...byte) (byte, bool) {
 	for _, val := range vals {
-		if findPatternWithMask(board, val, mask4Vertical) ||
-			findPatternWithMask(board, val, mask4Horzontal) ||
-			findPatternWithMask(board, val, mask4ForwardDiagnal) ||
-			findPatternWithMask(board, val, mask4BackwardsDiagnal) {
+		if board.findPatternWithMask(val, mask4Vertical) ||
+			board.findPatternWithMask(val, mask4Horzontal) ||
+			board.findPatternWithMask(val, mask4ForwardDiagnal) ||
+			board.findPatternWithMask(val, mask4BackwardsDiagnal) {
 			return val, true
 		}
 	}
-	return byte(0), full(board)
+	return byte(0), board.IsFull()
 }
 
-func full(board [][]byte) bool {
+func (board ByteBoard) IsFull() bool {
 	hasPossibleNextMove := false
 	for boardCol := 0; boardCol < len(board) && !hasPossibleNextMove; boardCol++ {
 		if board[boardCol][0] == byte(0) {
@@ -117,75 +114,3 @@ func full(board [][]byte) bool {
 	}
 	return !hasPossibleNextMove
 }
-
-func findPatternWithMask(board [][]byte, val byte, mask [][]bool) bool {
-	for boardCol := 0; boardCol <= len(board)-len(mask); boardCol++ {
-		for boardRow := 0; boardRow <= len(board)-len(mask[0]); boardRow++ {
-			accross := 0
-
-			for maskCol := 0; maskCol < len(mask); maskCol++ {
-				for maskRow := 0; maskRow < len(mask[maskCol]); maskRow++ {
-
-					if mask[maskCol][maskRow] && board[boardCol+maskCol][boardRow+maskRow] == val {
-						accross++
-					}
-
-				}
-			}
-
-			if accross > 3 {
-				return true
-			}
-		}
-	}
-
-	return false
-}
-
-var mask4Vertical = [][]bool{
-	{true, true, true, true},
-}
-
-var mask4Horzontal = [][]bool{
-	{true},
-	{true},
-	{true},
-	{true},
-}
-
-var mask4ForwardDiagnal = [][]bool{
-	{true, false, false, false},
-	{false, true, false, false},
-	{false, false, true, false},
-	{false, false, false, true},
-}
-
-var mask4BackwardsDiagnal = [][]bool{
-	{false, false, false, true},
-	{false, false, true, false},
-	{false, true, false, false},
-	{true, false, false, false},
-}
-
-// func check(board [][]byte, val byte, c, r, sizeCol, sizeRow, incrementCol, incrementRow int) int {
-// 	count := 0
-// 	fmt.Println(c, r)
-//
-// 	if c+sizeCol >= len(board) || r+sizeRow > len(board[0]) {
-// 		return count
-// 	}
-//
-// 	for col := c; col < sizeCol+c; col += incrementCol {
-// 		for row := r; row < sizeRow+r; row += incrementRow {
-// 			if board[col][row] == val {
-// 				count++
-// 			} else if board[col][row] == byte(0) {
-// 				// empty spot
-// 			} else {
-// 				return 0
-// 			}
-// 		}
-// 	}
-// 	return count
-// }
-//

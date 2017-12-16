@@ -13,12 +13,12 @@ const (
 func main() {
 	blueChip, redChip := byte('O'), byte('X')
 
-	board := newBoard(8, 8)
+	board := NewByteBoard(8, 8)
 	machineTurn := false
 	for {
 		fmt.Print("\n\n\n\n\n\n\n\n\n\n\n\n\n\n")
 
-		if winner, done := terminal(board, blueChip, redChip); done {
+		if winner, done := board.IsTerminal(blueChip, redChip); done {
 			fmt.Printf("%c has won!\n", winner)
 			break
 		}
@@ -27,17 +27,16 @@ func main() {
 		if machineTurn {
 			fmt.Print("machine thinking...")
 			_, machineSelection := NegaMax(board, redChip, blueChip)
-			err = drop(board, redChip, machineSelection)
+			err = board.Drop(redChip, machineSelection)
 			fmt.Printf("and chose %d\n", machineSelection)
 		} else {
-			fmt.Println()
-			display(board)
+			fmt.Println(board)
 
 			fmt.Println("select a column number: ")
 			var userSelection int
 			fmt.Scanf("%d", &userSelection)
 
-			err = drop(board, blueChip, userSelection)
+			err = board.Drop(blueChip, userSelection)
 		}
 		if err != nil {
 			fmt.Println("column selected did not work")
@@ -48,15 +47,15 @@ func main() {
 
 var depth = 0
 
-func NegaMax(board [][]byte, val1, val2 byte) (score, column int) {
-	if full(board) {
+func NegaMax(board ByteBoard, val1, val2 byte) (score, column int) {
+	if board.IsFull() {
 		return 0, 0
 	}
 
 	for col := 0; col < len(board); col++ {
-		b := clone(board)
-		err := drop(b, val1, col)
-		if _, term := terminal(b, val1); err == nil && term {
+		b := board.Clone()
+		err := b.Drop(val1, col)
+		if _, term := b.IsTerminal(val1); err == nil && term {
 			score, column = 1, col
 			return score, column
 		}
@@ -65,8 +64,8 @@ func NegaMax(board [][]byte, val1, val2 byte) (score, column int) {
 	score, column = math.MinInt64, len(board)/2
 
 	for col := 0; col < len(board); col++ {
-		b := clone(board)
-		if err := drop(b, val1, col); err == nil {
+		b := board.Clone()
+		if err := board.Drop(val1, col); err == nil {
 			s, _ := NegaMax(b, val2, val1)
 			s = -s
 			if s > score {
@@ -77,8 +76,8 @@ func NegaMax(board [][]byte, val1, val2 byte) (score, column int) {
 	return score, column
 }
 
-func MinimaxDecision(board [][]byte, minVal, maxVal byte, depth int) int {
-	b := clone(board)
+func MinimaxDecision(board ByteBoard, minVal, maxVal byte, depth int) int {
+	b := board.Clone()
 
 	alpha, beta := math.Inf(-1), math.Inf(1)
 
@@ -86,7 +85,7 @@ func MinimaxDecision(board [][]byte, minVal, maxVal byte, depth int) int {
 
 	// scores := make([]float64, len(b))
 	for c := 0; c < len(b); c++ {
-		drop(board, maxVal, c)
+		board.Drop(maxVal, c)
 		v := minValue(board, alpha, beta, minVal, maxVal, maxDepth)
 		// scores = append(scores, v)
 
@@ -102,18 +101,18 @@ func MinimaxDecision(board [][]byte, minVal, maxVal byte, depth int) int {
 	return bestCol
 }
 
-func maxValue(board [][]byte, alpha, beta float64, minVal, maxVal byte, depth int) float64 {
+func maxValue(board ByteBoard, alpha, beta float64, minVal, maxVal byte, depth int) float64 {
 
 	depth--
-	if _, done := terminal(board, minVal, maxVal); done || depth <= 0 {
-		return score(board, maxVal) - score(board, minVal)
+	if _, done := board.IsTerminal(minVal, maxVal); done || depth <= 0 {
+		return board.Score(maxVal) - board.Score(minVal)
 	}
 
 	v := math.Inf(1)
 
 	for c := 0; c < len(board); c++ {
-		b := clone(board)
-		drop(board, maxVal, c)
+		b := board.Clone()
+		board.Drop(maxVal, c)
 
 		utilVal := minValue(b, alpha, beta, minVal, maxVal, depth)
 		if utilVal > v {
@@ -132,18 +131,18 @@ func maxValue(board [][]byte, alpha, beta float64, minVal, maxVal byte, depth in
 	return v
 }
 
-func minValue(board [][]byte, alpha, beta float64, minVal, maxVal byte, depth int) float64 {
+func minValue(board ByteBoard, alpha, beta float64, minVal, maxVal byte, depth int) float64 {
 
 	depth--
-	if _, done := terminal(board, minVal, maxVal); done || depth <= 0 {
-		return score(board, maxVal) - score(board, minVal)
+	if _, done := board.IsTerminal(minVal, maxVal); done || depth <= 0 {
+		return board.Score(maxVal) - board.Score(minVal)
 	}
 
 	v := math.Inf(-1)
 
 	for c := 0; c < len(board); c++ {
-		b := clone(board)
-		drop(board, minVal, c)
+		b := board.Clone()
+		board.Drop(minVal, c)
 
 		utilVal := minValue(b, alpha, beta, minVal, maxVal, depth)
 		if utilVal < v {
