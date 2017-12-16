@@ -65,12 +65,6 @@ func solvenegamax(board [][]byte, val1, val2 byte) int {
 }
 
 func negamax(board [][]byte, val1, val2 byte, alpha, beta, moves int) int {
-	// fmt.Println(c)
-	// c +
-	// 	display(board)
-	// fmt.Println()
-	// time.Sleep(time.Second)
-
 	if full(board) {
 		return 0
 	}
