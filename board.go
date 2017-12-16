@@ -9,17 +9,15 @@ var (
 	errCollumnFull = errors.New("collumn full")
 )
 
-type ByteBoard [][]byte
-
-func NewByteBoard(cols, rows int) ByteBoard {
-	board := make(ByteBoard, cols)
+func newBoard(cols, rows int) [][]byte {
+	board := make([][]byte, cols)
 	for col := range board {
 		board[col] = make([]byte, rows)
 	}
 	return board
 }
 
-func (board ByteBoard) Drop(val byte, col int) error {
+func drop(board [][]byte, val byte, col int) error {
 	if col < 0 || col >= len(board) {
 		return nil
 	}
@@ -39,35 +37,40 @@ func (board ByteBoard) Drop(val byte, col int) error {
 	return nil
 }
 
-func (board ByteBoard) Utility(val byte, col int) float64 {
-	b := board.Clone()
-	currentScore := board.Score(val)
-	b.Drop(val, col)
-	return b.Score(val) - currentScore
+func utility(board [][]byte, val byte, col int) float64 {
+	b := clone(board)
+	current := score(board, val)
+	drop(b, val, col)
+	return score(b, val) - current
 }
 
-func (board ByteBoard) String() string {
-	str := ""
+func display(board [][]byte) {
 	for row := 0; row < len(board[len(board)-1]); row++ {
-		str += fmt.Sprintf("|")
+		fmt.Printf("|")
 		for col := 0; col < len(board); col++ {
 			if board[col][row] != 0 {
-				str += fmt.Sprintf(" %c |", board[col][row])
+				fmt.Printf(" %c |", board[col][row])
 			} else {
-				str += fmt.Sprint("   |")
+				fmt.Print("   |")
 			}
 		}
-		str += fmt.Sprintln()
+		fmt.Println()
 	}
 
+	// for range board {
+	// 	fmt.Print("----")
+	// }
+
+	// fmt.Println()
+	// fmt.Print("|")
 	for i := range board {
-		str += fmt.Sprintf(" %2d ", i)
+		fmt.Printf(" %2d ", i)
 	}
-	return str + "\n"
+	fmt.Println()
 }
 
-func (board ByteBoard) Clone() ByteBoard {
-	cloned := NewByteBoard(len(board), len(board[0]))
+func clone(board [][]byte) [][]byte {
+	cloned := newBoard(len(board), len(board[0]))
 
 	for col := range board {
 		for row := range board[col] {
@@ -78,34 +81,34 @@ func (board ByteBoard) Clone() ByteBoard {
 	return cloned
 }
 
-func (board ByteBoard) Score(val byte) float64 {
-	if _, done := board.IsTerminal(val); done {
+func score(board [][]byte, val byte) float64 {
+	if _, done := terminal(board, val); done {
 		return winningScore
 	}
 
-	if board.findPatternWithMask(val, mask4Vertical) ||
-		board.findPatternWithMask(val, mask4Horzontal) ||
-		board.findPatternWithMask(val, mask4ForwardDiagnal) ||
-		board.findPatternWithMask(val, mask4BackwardsDiagnal) {
+	if findPatternWithMask(board, val, mask4Vertical) ||
+		findPatternWithMask(board, val, mask4Horzontal) ||
+		findPatternWithMask(board, val, mask4ForwardDiagnal) ||
+		findPatternWithMask(board, val, mask4BackwardsDiagnal) {
 		return 1
 	}
 	return 0
 
 }
 
-func (board ByteBoard) IsTerminal(vals ...byte) (byte, bool) {
+func terminal(board [][]byte, vals ...byte) (byte, bool) {
 	for _, val := range vals {
-		if board.findPatternWithMask(val, mask4Vertical) ||
-			board.findPatternWithMask(val, mask4Horzontal) ||
-			board.findPatternWithMask(val, mask4ForwardDiagnal) ||
-			board.findPatternWithMask(val, mask4BackwardsDiagnal) {
+		if findPatternWithMask(board, val, mask4Vertical) ||
+			findPatternWithMask(board, val, mask4Horzontal) ||
+			findPatternWithMask(board, val, mask4ForwardDiagnal) ||
+			findPatternWithMask(board, val, mask4BackwardsDiagnal) {
 			return val, true
 		}
 	}
-	return byte(0), board.IsFull()
+	return byte(0), full(board)
 }
 
-func (board ByteBoard) IsFull() bool {
+func full(board [][]byte) bool {
 	hasPossibleNextMove := false
 	for boardCol := 0; boardCol < len(board) && !hasPossibleNextMove; boardCol++ {
 		if board[boardCol][0] == byte(0) {
@@ -114,3 +117,26 @@ func (board ByteBoard) IsFull() bool {
 	}
 	return !hasPossibleNextMove
 }
+
+// func check(board [][]byte, val byte, c, r, sizeCol, sizeRow, incrementCol, incrementRow int) int {
+// 	count := 0
+// 	fmt.Println(c, r)
+//
+// 	if c+sizeCol >= len(board) || r+sizeRow > len(board[0]) {
+// 		return count
+// 	}
+//
+// 	for col := c; col < sizeCol+c; col += incrementCol {
+// 		for row := r; row < sizeRow+r; row += incrementRow {
+// 			if board[col][row] == val {
+// 				count++
+// 			} else if board[col][row] == byte(0) {
+// 				// empty spot
+// 			} else {
+// 				return 0
+// 			}
+// 		}
+// 	}
+// 	return count
+// }
+//

@@ -13,13 +13,13 @@ const (
 func main() {
 	blueChip, redChip := byte('O'), byte('X')
 
-	board := NewByteBoard(8, 8)
+	board := newBoard(8, 8)
 	machineTurn := false
 	for {
 		fmt.Print("\n\n\n\n\n\n\n\n\n\n\n\n\n\n")
 
-		if winner, done := board.IsTerminal(blueChip, redChip); done {
-			fmt.Println(board)
+		if winner, done := terminal(board, blueChip, redChip); done {
+			display(board)
 			fmt.Printf("%c has won!\n", winner)
 			break
 		}
@@ -28,16 +28,16 @@ func main() {
 		if machineTurn {
 			fmt.Print("machine thinking...")
 			machineSelection := solvenegamax(board, redChip, blueChip)
-			err = board.Drop(redChip, machineSelection)
+			err = drop(board, redChip, machineSelection)
 			fmt.Printf("and chose %d\n", machineSelection)
 		} else {
-			fmt.Println(board)
+			display(board)
 
 			fmt.Println("select a column number: ")
 			var userSelection int
 			fmt.Scanf("%d", &userSelection)
 
-			err = board.Drop(blueChip, userSelection)
+			err = drop(board, blueChip, userSelection)
 		}
 		if err != nil {
 			fmt.Println("column selected did not work")
@@ -46,23 +46,32 @@ func main() {
 	}
 }
 
-func solvenegamax(board ByteBoard, val1, val2 byte) int {
+func solvenegamax(board [][]byte, val1, val2 byte) int {
 	scores := make([]int, len(board))
 
 	max := len(board) * len(board[0])
 
-	b := board.Clone()
-
 	for i := range scores {
-		scores[i] = negamax(b, val1, val2, max/2, -max/2, 0)
+		b := clone(board)
+		if err := drop(b, val1, i); err == nil {
+			scores[i] = negamax(b, val1, val2, max-1, -max+1, 0)
+		} else {
+			scores[i] = -max
+		}
 	}
 
 	fmt.Println(scores)
 	return maxInt(scores)
 }
 
-func negamax(board ByteBoard, val1, val2 byte, alpha, beta, moves int) int {
-	if board.IsFull() {
+func negamax(board [][]byte, val1, val2 byte, alpha, beta, moves int) int {
+	// fmt.Println(c)
+	// c +
+	// 	display(board)
+	// fmt.Println()
+	// time.Sleep(time.Second)
+
+	if full(board) {
 		return 0
 	}
 
@@ -71,9 +80,9 @@ func negamax(board ByteBoard, val1, val2 byte, alpha, beta, moves int) int {
 	max := len(board)*len(board[0]) - moves/2
 
 	for col := 0; col < len(board); col++ {
-		b := board.Clone()
-		err := b.Drop(val1, col)
-		if _, term := b.IsTerminal(val1); err == nil && term {
+		b := clone(board)
+		err := drop(b, val1, col)
+		if _, term := terminal(b, val1); err == nil && term {
 			return max
 		}
 	}
@@ -86,8 +95,8 @@ func negamax(board ByteBoard, val1, val2 byte, alpha, beta, moves int) int {
 	}
 
 	for col := 0; col < len(board); col++ {
-		b := board.Clone()
-		if err := board.Drop(val1, col); err == nil {
+		b := clone(board)
+		if err := drop(b, val1, col); err == nil {
 			score := -negamax(b, val2, val1, -beta, -alpha, moves)
 			if score >= beta {
 				return score
